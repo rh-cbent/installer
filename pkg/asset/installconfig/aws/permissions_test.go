@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/installer/pkg/ipnet"
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/aws"
+	"github.com/openshift/installer/pkg/types/network"
 )
 
 func basicInstallConfig() types.InstallConfig {
@@ -651,8 +652,22 @@ func TestVPCPermissions(t *testing.T) {
 			requiredPerms := RequiredPermissionGroups(ic)
 			assert.Contains(t, requiredPerms, PermissionDeleteNetworking)
 		})
+		t.Run("delete network permissions when VPC not specified for ISO/ISOB regions", func(t *testing.T) {
+			ic := validBYOSubnetsInstallConfig()
+			ic.AWS.Region = "us-iso-east-1"
+			ic.AWS.VPC.Subnets = nil
+			ic.AWS.HostedZone = ""
+			requiredPerms := RequiredPermissionGroups(ic)
+			assert.Contains(t, requiredPerms, PermissionDeleteNetworking)
+		})
 		t.Run("delete shared network permissions when VPC specified for standard region", func(t *testing.T) {
 			ic := validBYOSubnetsInstallConfig()
+			requiredPerms := RequiredPermissionGroups(ic)
+			assert.Contains(t, requiredPerms, PermissionDeleteSharedNetworking)
+		})
+		t.Run("delete shared network permissions when VPC specified for ISO/ISOB regions", func(t *testing.T) {
+			ic := validBYOSubnetsInstallConfig()
+			ic.AWS.Region = "us-iso-east-1"
 			requiredPerms := RequiredPermissionGroups(ic)
 			assert.Contains(t, requiredPerms, PermissionDeleteSharedNetworking)
 		})
@@ -669,24 +684,12 @@ func TestVPCPermissions(t *testing.T) {
 				requiredPerms := RequiredPermissionGroups(ic)
 				assert.NotContains(t, requiredPerms, PermissionDeleteNetworking)
 			})
-			t.Run("on secret regions", func(t *testing.T) {
-				ic := validBYOSubnetsInstallConfig()
-				ic.AWS.Region = "us-iso-east-1"
-				requiredPerms := RequiredPermissionGroups(ic)
-				assert.NotContains(t, requiredPerms, PermissionDeleteNetworking)
-			})
 		})
 		t.Run("delete shared network permissions", func(t *testing.T) {
 			t.Run("when VPC not specified", func(t *testing.T) {
 				ic := validBYOSubnetsInstallConfig()
 				ic.AWS.VPC.Subnets = nil
 				ic.AWS.HostedZone = ""
-				requiredPerms := RequiredPermissionGroups(ic)
-				assert.NotContains(t, requiredPerms, PermissionDeleteSharedNetworking)
-			})
-			t.Run("on secret regions", func(t *testing.T) {
-				ic := validBYOSubnetsInstallConfig()
-				ic.AWS.Region = "us-iso-east-1"
 				requiredPerms := RequiredPermissionGroups(ic)
 				assert.NotContains(t, requiredPerms, PermissionDeleteSharedNetworking)
 			})
@@ -708,6 +711,13 @@ func TestPrivateZonePermissions(t *testing.T) {
 			requiredPerms := RequiredPermissionGroups(ic)
 			assert.Contains(t, requiredPerms, PermissionDeleteHostedZone)
 		})
+		t.Run("delete hosted zone permissions when PHZ not specified on ISO/ISOB regions", func(t *testing.T) {
+			ic := validBYOSubnetsInstallConfig()
+			ic.AWS.Region = "us-iso-east-1"
+			ic.AWS.HostedZone = ""
+			requiredPerms := RequiredPermissionGroups(ic)
+			assert.Contains(t, requiredPerms, PermissionDeleteHostedZone)
+		})
 	})
 	t.Run("Should not include", func(t *testing.T) {
 		t.Run("create hosted zone permissions when PHZ specified", func(t *testing.T) {
@@ -716,11 +726,6 @@ func TestPrivateZonePermissions(t *testing.T) {
 			assert.NotContains(t, requiredPerms, PermissionCreateHostedZone)
 		})
 		t.Run("delete hosted zone permissions", func(t *testing.T) {
-			t.Run("on secret regions", func(t *testing.T) {
-				ic := validBYOSubnetsInstallConfig()
-				requiredPerms := RequiredPermissionGroups(ic)
-				assert.NotContains(t, requiredPerms, PermissionDeleteHostedZone)
-			})
 			t.Run("when PHZ specified", func(t *testing.T) {
 				ic := validBYOSubnetsInstallConfig()
 				requiredPerms := RequiredPermissionGroups(ic)
@@ -765,11 +770,11 @@ func TestBasePermissions(t *testing.T) {
 			assert.Contains(t, requiredPerms, PermissionDeleteBase)
 		})
 	})
-	t.Run("Should not include base delete permissions on secret regions", func(t *testing.T) {
+	t.Run("Should include base delete permissions on ISO/ISOB regions", func(t *testing.T) {
 		ic := validBYOSubnetsInstallConfig()
 		ic.AWS.Region = "us-iso-east-1"
 		requiredPerms := RequiredPermissionGroups(ic)
-		assert.NotContains(t, requiredPerms, PermissionDeleteBase)
+		assert.Contains(t, requiredPerms, PermissionDeleteBase)
 	})
 }
 

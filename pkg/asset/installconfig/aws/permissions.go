@@ -488,6 +488,10 @@ func RequiredPermissionGroups(ic *types.InstallConfig) []PermissionGroup {
 
 	if !usingExistingVPC {
 		permissionGroups = append(permissionGroups, PermissionCreateNetworking)
+
+		if ic.AWS.IPFamily.DualStackEnabled() {
+			permissionGroups = append(permissionGroups, PermissionCreateDualstackNetworking)
+		}
 	}
 
 	if !usingExistingPrivateZone {
@@ -499,22 +503,18 @@ func RequiredPermissionGroups(ic *types.InstallConfig) []PermissionGroup {
 		permissionGroups = append(permissionGroups, PermissionKMSEncryptionKeys)
 	}
 
-	isSecretRegion, err := IsSecretRegion(ic.AWS.Region)
-	if err != nil {
-		logrus.Warnf("Unable to determine if AWS region is secret: %v", err)
-		return permissionGroups
+	// Add delete permissions
+	permissionGroups = append(permissionGroups, PermissionDeleteBase)
+	if usingExistingVPC {
+		permissionGroups = append(permissionGroups, PermissionDeleteSharedNetworking)
+	} else {
+		permissionGroups = append(permissionGroups, PermissionDeleteNetworking)
+		if ic.AWS.IPFamily.DualStackEnabled() {
+			permissionGroups = append(permissionGroups, PermissionDeleteDualstackNetworking)
+		}
 	}
-	// Add delete permissions for non-C2S installs.
-	if !isSecretRegion {
-		permissionGroups = append(permissionGroups, PermissionDeleteBase)
-		if usingExistingVPC {
-			permissionGroups = append(permissionGroups, PermissionDeleteSharedNetworking)
-		} else {
-			permissionGroups = append(permissionGroups, PermissionDeleteNetworking)
-		}
-		if !usingExistingPrivateZone {
-			permissionGroups = append(permissionGroups, PermissionDeleteHostedZone)
-		}
+	if !usingExistingPrivateZone {
+		permissionGroups = append(permissionGroups, PermissionDeleteHostedZone)
 	}
 
 	if ic.AWS.PublicIpv4Pool != "" {
@@ -559,6 +559,10 @@ func RequiredPermissionGroups(ic *types.InstallConfig) []PermissionGroup {
 
 	if includesEdgeDefaultInstanceType(ic) {
 		permissionGroups = append(permissionGroups, PermissionEdgeDefaultInstance)
+	}
+
+	if includesDedicatedHosts(ic) {
+		permissionGroups = append(permissionGroups, PermissionDedicatedHosts)
 	}
 
 	return permissionGroups
@@ -764,6 +768,19 @@ func includesEdgeDefaultInstanceType(installConfig *types.InstallConfig) bool {
 			continue
 		}
 		if mpool.Platform.AWS == nil || len(mpool.Platform.AWS.InstanceType) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// includesDedicatedHosts checks if any dedicated hosts are specified for worker machine pools.
+func includesDedicatedHosts(installConfig *types.InstallConfig) bool {
+	for _, mpool := range installConfig.Compute {
+		if mpool.Name != types.MachinePoolComputeRoleName {
+			continue
+		}
+		if mpool.Platform.AWS != nil && mpool.Platform.AWS.HostPlacement != nil {
 			return true
 		}
 	}
